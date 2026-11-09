@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Tarefas Dinâmicas (AJAX / Fetch)</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f9f9f9; }
+        .container { max-width: 600px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .form-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 8px 14px; cursor: pointer; border: none; border-radius: 4px; color: white; }
+        .btn-add { background-color: #28a745; }
+        .btn-status { background-color: #6c757d; }
+        .btn-delete { background-color: #dc3545; }
+        ul { list-style: none; padding: 0; }
+        li { padding: 10px; border-bottom: 1px solid #ddd; display: flex; align-items: center; justify-content: space-between; }
+        .concluida { text-decoration: line-through; color: #888; }
+        #mensagem { margin-bottom: 15px; font-weight: bold; }
+        .sucesso { color: #28a745; }
+        .erro { color: #dc3545; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Tarefas (AJAX / Fetch)</h1>
+
+    <div id="mensagem"></div>
+
+    <!-- Formulário de adição -->
+    <form id="form-tarefa" class="form-group">
+        <input type="text" id="titulo" placeholder="Digite uma nova tarefa..." required>
+        <button type="submit" class="btn-add">Adicionar</button>
+    </form>
+
+    <hr>
+
+    <h2>Minhas Tarefas</h2>
+    <ul id="lista-tarefas">
+        <li>Carregando tarefas...</li>
+    </ul>
+</div>
+
+<script>
+    const listaTarefas = document.getElementById('lista-tarefas');
+    const formTarefa = document.getElementById('form-tarefa');
+    const inputTitulo = document.getElementById('titulo');
+    const divMensagem = document.getElementById('mensagem');
+
+    // Exibe mensagens temporárias na tela
+    function exibirMensagem(texto, tipo = 'sucesso') {
+        divMensagem.className = tipo;
+        divMensagem.textContent = texto;
+        setTimeout(() => { divMensagem.textContent = ''; }, 3000);
+    }
+
+    // 1. Carregar tarefas via FETCH (GET)
+    async function carregarTarefas() {
+        try {
+            const resposta = await fetch('api.php?acao=listar');
+            const resultado = await resposta.json();
+
+            if (resultado.sucesso) {
+                renderizarLista(resultado.dados);
+            } else {
+                exibirMensagem(resultado.erro, 'erro');
+            }
+        } catch (erro) {
+            exibirMensagem('Erro ao conectar com o servidor.', 'erro');
+        }
+    }
+
+    // 2. Renderizar os elementos na lista HTML
+    function renderizarLista(tarefas) {
+        listaTarefas.innerHTML = '';
+
+        if (tarefas.length === 0) {
+            listaTarefas.innerHTML = '<li>Nenhuma tarefa encontrada.</li>';
+            return;
+        }
+
+        tarefas.forEach(tarefa => {
+            const li = document.createElement('li');
+            
+            const span = document.createElement('span');
+            span.textContent = tarefa.titulo;
+            if (parseInt(tarefa.concluida) === 1) {
+                span.classList.add('concluida');
+            }
+
+            const divAcoes = document.createElement('div');
+
+            // Botão Concluir / Desfazer
+            const btnStatus = document.createElement('button');
+            btnStatus.className = 'btn-status';
+            btnStatus.textContent = parseInt(tarefa.concluida) === 1 ? 'Desfazer' : 'Concluir';
+            btnStatus.onclick = () => alternarStatus(tarefa.id, tarefa.concluida);
+
+            // Botão Excluir
+            const btnExcluir = document.createElement('button');
+            btnExcluir.className = 'btn-delete';
+            btnExcluir.style.marginLeft = '5px';
+            btnExcluir.textContent = 'Excluir';
+            btnExcluir.onclick = () => excluirTarefa(tarefa.id);
+
+            divAcoes.appendChild(btnStatus);
+            divAcoes.appendChild(btnExcluir);
+
+            li.appendChild(span);
+            li.appendChild(divAcoes);
+
+            listaTarefas.appendChild(li);
+        });
+    }
+
+    // 3. Cadastrar Tarefa via FETCH (POST)
+    formTarefa.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const formData = new FormData();
+        formData.append('acao', 'cadastrar');
+        formData.append('titulo', inputTitulo.value);
+
+        try {
+            const resposta = await fetch('api.php', {
+                method: 'POST',
+                body: formData
+            });
+            const resultado = await resposta.json();
+
+            if (resultado.sucesso) {
+                inputTitulo.value = '';
+                exibirMensagem(resultado.mensagem);
+                carregarTarefas(); // Atualiza a lista dinamicamente
+            } else {
+                exibirMensagem(resultado.erro, 'erro');
+            }
+        } catch (erro) {
+            exibirMensagem('Erro ao salvar tarefa.', 'erro');
+        }
+    });
+
+    // 4. Alternar Status via FETCH (POST)
+    async function alternarStatus(id, concluida) {
+        const formData = new FormData();
+        formData.append('acao', 'alternar_status');
+        formData.append('id', id);
+        formData.append('concluida', concluida);
+
+        try {
+            const resposta = await fetch('api.php', {
+                method: 'POST',
+                body: formData
+            });
+            const resultado = await resposta.json();
+
+            if (resultado.sucesso) {
+                carregarTarefas();
+            } else {
+                exibirMensagem(resultado.erro, 'erro');
+            }
+        } catch (erro) {
+            exibirMensagem('Erro ao atualizar status.', 'erro');
+        }
+    }
+
+    // 5. Excluir Tarefa via FETCH (POST)
+    async function excluirTarefa(id) {
+        if (!confirm('Deseja realmente excluir esta tarefa?')) return;
+
+        const formData = new FormData();
+        formData.append('acao', 'excluir');
+        formData.append('id', id);
+
+        try {
+            const resposta = await fetch('api.php', {
+                method: 'POST',
+                body: formData
+            });
+            const resultado = await resposta.json();
+
+            if (resultado.sucesso) {
+                exibirMensagem(resultado.mensagem);
+                carregarTarefas();
+            } else {
+                exibirMensagem(resultado.erro, 'erro');
+            }
+        } catch (erro) {
+            exibirMensagem('Erro ao excluir tarefa.', 'erro');
+        }
+    }
+
+    // Carrega a lista assim que a página abre
+    carregarTarefas();
+</script>
+
+</body>
+</html>
